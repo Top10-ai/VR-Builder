@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VR Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{--bg:#dfe6f5;--pn:#fffffff2;--ink:#14172a;--mu:#5d6785;--ln:#d2d7e6;--ac:#4f46e5;--acf:#fff;box-sizing:border-box}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1020;--pn:#151a30f2;--ink:#e7eaf8;--mu:#97a1c2;--ln:#2b3354;--ac:#8b86ff;--acf:#0d1020}}
+:root[data-theme="dark"]{--bg:#0d1020;--pn:#151a30f2;--ink:#e7eaf8;--mu:#97a1c2;--ln:#2b3354;--ac:#8b86ff;--acf:#0d1020}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+canvas{position:fixed;inset:0;display:block;touch-action:none}
+button,input,select{font:inherit;color:var(--ink)}
+.b{flex:none;padding:9px 12px;border:1px solid var(--ln);border-radius:10px;background:var(--pn);cursor:pointer;white-space:nowrap}
+.p{background:var(--ac);color:var(--acf);border-color:var(--ac);font-weight:600}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+#bar{position:fixed;top:0;left:0;right:0;z-index:10;display:flex;gap:6px;overflow-x:auto;padding:calc(8px + env(safe-area-inset-top,0px)) 10px 8px}
+#exp{margin-left:auto}
+#msg{position:fixed;top:64px;left:10px;right:10px;z-index:30;padding:10px 12px;border-radius:10px;background:#b3261e;color:#fff}
+#tip{position:fixed;left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom,0px));width:fit-content;max-width:92%;margin:auto;z-index:5;padding:6px 12px;border-radius:999px;background:#000a;color:#fff;font-size:13px;text-align:center;pointer-events:none}
+#sheet{position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:10;display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:46vh;overflow:auto;padding:10px;border:1px solid var(--ln);border-radius:14px;background:var(--pn)}
+#sheet label{display:grid;gap:3px;font-size:12px;color:var(--mu)}
+#sheet input[type=range]{width:100%;accent-color:var(--ac)}
+#sheet input[type=color]{width:100%;height:34px;border:1px solid var(--ln);border-radius:8px;padding:2px;background:transparent}
+#sheet select{padding:6px;border:1px solid var(--ln);border-radius:8px;background:transparent}
+@media (min-width:700px){#sheet{left:auto;right:10px;top:64px;bottom:auto;width:260px;grid-template-columns:1fr}}
+#vrbar{display:none;position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:20;gap:6px}
+#rot{display:none;position:fixed;left:10px;right:10px;top:42%;z-index:20;text-align:center;color:#fff;text-shadow:0 1px 4px #000;pointer-events:none}
+body.vr #bar,body.vr #sheet,body.vr #tip{display:none}
+body.vr #vrbar{display:flex}
+@media (orientation:portrait){body.vr #rot{display:block}}
+dialog{width:min(760px,92vw);background:var(--bg);color:var(--ink);border:1px solid var(--ln);border-radius:14px;padding:16px}
+dialog::backdrop{background:#0008}
+textarea{width:100%;height:50vh;margin:10px 0;padding:10px;font:12px/1.5 ui-monospace,Consolas,monospace;background:var(--pn);color:var(--ink);border:1px solid var(--ln);border-radius:8px;resize:none}
+</style>
+</head>
+<body>
+<div id="msg" hidden></div>
+<div id="bar">
+ <button class="b" data-t="box">＋ Caja</button>
+ <button class="b" data-t="sphere">＋ Esfera</button>
+ <button class="b" data-t="cylinder">＋ Cilindro</button>
+ <button class="b" data-t="cone">＋ Cono</button>
+ <button class="b" id="exp">Exportar</button>
+ <button class="b p" id="vr">🥽 Modo VR</button>
+</div>
+<div id="tip">Arrastra para mirar, toca un objeto para editarlo. En PC: WASD para moverte.</div>
+<div id="sheet" hidden>
+ <label>Izquierda / derecha<input id="px" type="range" min="-10" max="10" step=".1"></label>
+ <label>Altura<input id="py" type="range" min="0" max="6" step=".1"></label>
+ <label>Profundidad<input id="pz" type="range" min="-12" max="4" step=".1"></label>
+ <label>Tamaño<input id="ps" type="range" min=".3" max="4" step=".1"></label>
+ <label>Color<input id="pc" type="color"></label>
+ <label>Movimiento<select id="pa"><option value="none">Quieto</option><option value="spin">Girar</option><option value="float">Flotar</option><option value="pulse">Latir</option></select></label>
+ <button class="b" id="del">Eliminar</button>
+</div>
+<div id="vrbar"><button class="b p" id="out">Salir</button><button class="b" id="sp">Vista normal</button></div>
+<div id="rot">Gira el dispositivo en horizontal</div>
+<dialog id="dlg">
+ <b>Tu escena lista para usar</b>
+ <p style="color:var(--mu)">Guárdala como index.html y ábrela en tu navegador o en el navegador de tu visor VR.</p>
+ <textarea id="code" readonly></textarea>
+ <div style="display:flex;gap:6px"><button class="b p" id="cp">Copiar código</button><button class="b" id="cl">Cerrar</button></div>
+</dialog>
+<script>
+const $=i=>document.getElementById(i);
+const msg=t=>{$('msg').textContent=t;$('msg').hidden=!t};
+const P=['#ff8a4c','#4cc9f0','#b388ff','#ffd166','#06d6a0','#ef476f'];
+const GEO={box:()=>new THREE.BoxGeometry(1,1,1),sphere:()=>new THREE.SphereGeometry(.5,32,16),cylinder:()=>new THREE.CylinderGeometry(.5,.5,1,32),cone:()=>new THREE.ConeGeometry(.5,1,32),torus:()=>new THREE.TorusGeometry(.4,.1,16,48)};
+const AG={box:'primitive: box',sphere:'primitive: sphere; radius: 0.5',cylinder:'primitive: cylinder; radius: 0.5; height: 1',cone:'primitive: cone; radiusBottom: 0.5; radiusTop: 0; height: 1',torus:'primitive: torus; radius: 0.4; radiusTubular: 0.1'};
+let S={objs:[
+ {id:1,t:'box',x:-1.5,y:.5,z:-3,s:1,c:'#ff8a4c',a:'spin'},
+ {id:2,t:'sphere',x:0,y:1.2,z:-3,s:1,c:'#4cc9f0',a:'float'},
+ {id:3,t:'torus',x:1.6,y:.7,z:-3,s:1.2,c:'#b388ff',a:'spin'}]};
+try{const t=localStorage.getItem('vrb2');if(t){const j=JSON.parse(t);if(j&&Array.isArray(j.objs))S=j}}catch(e){}
+let sel=null,uid=Math.max(0,...S.objs.map(o=>o.id))+1;
+const cur=()=>S.objs.find(o=>o.id===sel);
+const save=()=>{try{localStorage.setItem('vrb2',JSON.stringify(S))}catch(e){}};
+const r1=n=>+n.toFixed(2);
+const anim=o=>({none:'',
+ spin:'property: rotation; from: 0 0 0; to: 0 360 0; loop: true; dur: 6000; easing: linear',
+ float:`property: position; from: ${o.x} ${o.y} ${o.z}; to: ${o.x} ${r1(o.y+.5)} ${o.z}; dir: alternate; loop: true; dur: 1500; easing: easeInOutSine`,
+ pulse:`property: scale; from: ${o.s} ${o.s} ${o.s}; to: ${r1(o.s*1.3)} ${r1(o.s*1.3)} ${r1(o.s*1.3)}; dir: alternate; loop: true; dur: 800; easing: easeInOutSine`}[o.a]);
+function code(){
+ const ents=S.objs.map(o=>{const a=anim(o);return `    <a-entity geometry="${AG[o.t]}" material="color: ${o.c}" position="${o.x} ${o.y} ${o.z}" scale="${o.s} ${o.s} ${o.s}"${a?` animation="${a}"`:''}></a-entity>`}).join('\n');
+ return `<!DOCTYPE html>\n<html lang="es">\n<head>\n  <meta charset="utf-8">\n  <title>Mi escena VR</title>\n  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"><\/script>\n</head>\n<body>\n  <a-scene>\n    <a-sky color="#9ad1ff"></a-sky>\n    <a-plane rotation="-90 0 0" width="60" height="60" color="#4a7c59"></a-plane>\n    <a-light type="ambient" color="#cccccc" intensity="0.9"></a-light>\n    <a-light type="directional" position="-1 3 2" intensity="0.7"></a-light>\n${ents}\n    <a-entity position="0 0 4">\n      <a-camera position="0 1.6 0"></a-camera>\n    </a-entity>\n  </a-scene>\n</body>\n</html>`}
+
+function start(){
+ const R=new THREE.WebGLRenderer({antialias:true}),C=R.domElement;
+ R.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+ document.body.prepend(C);
+ const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(70,1,.1,200);
+ scene.background=new THREE.Color('#9ad1ff');
+ scene.add(new THREE.AmbientLight(0xffffff,.8));
+ const sun=new THREE.DirectionalLight(0xffffff,.6);sun.position.set(-2,5,3);scene.add(sun);
+ const fl=new THREE.Mesh(new THREE.PlaneGeometry(60,60),new THREE.MeshLambertMaterial({color:'#4a7c59'}));fl.rotation.x=-Math.PI/2;scene.add(fl);
+ const gr=new THREE.GridHelper(60,60,0xffffff,0xffffff);gr.position.y=.01;gr.material.transparent=true;gr.material.opacity=.2;scene.add(gr);
+ const M={},pos=new THREE.Vector3(0,1.6,4),dir=new THREE.Vector3(),Y=new THREE.Vector3(0,1,0);
+ let yaw=0,pitch=0,vr=false,split=false,gyro=false,yaw0=null;
+ const dq=new THREE.Quaternion(),eu=new THREE.Euler(),q0=new THREE.Quaternion(),q1=new THREE.Quaternion(-Math.SQRT1_2,0,0,Math.SQRT1_2),zee=new THREE.Vector3(0,0,1);
+ const sc=new THREE.StereoCamera(),sz=new THREE.Vector2();sc.aspect=.5;
+ const rs=()=>{R.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()};
+
+ function mk(o){const m=new THREE.Mesh(GEO[o.t](),new THREE.MeshLambertMaterial({color:o.c}));m.userData.id=o.id;M[o.id]=m;scene.add(m)}
+ const F={px:'x',py:'y',pz:'z',ps:'s',pc:'c',pa:'a'};
+ function select(id){const p=cur();if(p&&M[p.id])M[p.id].material.emissive.setHex(0);
+  sel=id;const o=cur();$('sheet').hidden=!o;$('tip').hidden=!!o;
+  if(o){M[o.id].material.emissive.setHex(0x444444);for(const k in F)$(k).value=o[F[k]]}}
+ function add(t){const k=S.objs.length;
+  const o={id:uid++,t,x:r1(((k%7)-3)*1.2),y:1,z:-3-Math.floor(k/7)*1.5,s:1,c:P[k%P.length],a:'none'};
+  S.objs.push(o);mk(o);select(o.id);save()}
+ for(const k in F)$(k).oninput=e=>{const o=cur();if(!o)return;const f=F[k];
+  o[f]=(f==='c'||f==='a')?e.target.value:+e.target.value;
+  if(f==='c')M[o.id].material.color.set(o.c);save()};
+ $('bar').addEventListener('click',e=>{const t=e.target.dataset&&e.target.dataset.t;if(t)add(t)});
+ $('del').onclick=()=>{const o=cur();if(!o)return;const m=M[o.id];scene.remove(m);m.geometry.dispose();m.material.dispose();
+  S.objs=S.objs.filter(q=>q.id!==o.id);select(null);save()};
+ $('exp').onclick=()=>{$('code').value=code();$('dlg').showModal()};
+ $('cl').onclick=()=>$('dlg').close();
+ $('cp').onclick=async()=>{const t=$('code'),b=$('cp');
+  try{await navigator.clipboard.writeText(t.value);b.textContent='¡Copiado!'}
+  catch(e){t.select();try{document.execCommand('copy');b.textContent='¡Copiado!'}catch(_){}}
+  setTimeout(()=>b.textContent='Copiar código',1500)};
+
+ /* mirar: arrastrar / tocar */
+ let dn=false,x0=0,y0=0,lx=0,ly=0;
+ const ray=new THREE.Raycaster(),v2=new THREE.Vector2();
+ C.addEventListener('pointerdown',e=>{dn=true;lx=x0=e.clientX;ly=y0=e.clientY;try{C.setPointerCapture(e.pointerId)}catch(_){}});
+ C.addEventListener('pointermove',e=>{if(!dn)return;yaw+=(e.clientX-lx)*.005;pitch=Math.max(-1.4,Math.min(1.4,pitch+(e.clientY-ly)*.005));lx=e.clientX;ly=e.clientY});
+ C.addEventListener('pointerup',e=>{dn=false;
+  if(vr||Math.hypot(e.clientX-x0,e.clientY-y0)>6)return;
+  v2.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);ray.setFromCamera(v2,cam);
+  const h=ray.intersectObjects(S.objs.map(o=>M[o.id]));select(h.length?h[0].object.userData.id:null)});
+ const K={};
+ addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;K[e.key.toLowerCase()]=true;if(e.key==='Escape'&&vr)leave()});
+ addEventListener('keyup',e=>{K[e.key.toLowerCase()]=false});
+
+ /* modo VR: pantalla completa + giroscopio + vista dividida */
+ function onOri(e){if(e.alpha==null)return;const d=Math.PI/180,o=((screen.orientation&&screen.orientation.angle)||window.orientation||0)*d;
+  eu.set(e.beta*d,e.alpha*d,-e.gamma*d,'YXZ');dq.setFromEuler(eu);dq.multiply(q1);dq.multiply(q0.setFromAxisAngle(zee,-o));
+  if(yaw0===null){eu.setFromQuaternion(dq,'YXZ');yaw0=-eu.y}gyro=true}
+ async function enter(){
+  vr=true;split=matchMedia('(pointer:coarse)').matches;yaw0=null;gyro=false;
+  document.body.classList.add('vr');$('sp').textContent=split?'Vista normal':'Dividir pantalla';
+  const de=document.documentElement;
+  if(de.requestFullscreen)de.requestFullscreen().then(()=>screen.orientation&&screen.orientation.lock&&screen.orientation.lock('landscape')).catch(()=>{});
+  if(window.DeviceOrientationEvent&&DeviceOrientationEvent.requestPermission){try{await DeviceOrientationEvent.requestPermission()}catch(e){}}
+  addEventListener('deviceorientation',onOri);rs()}
+ function leave(){vr=false;split=false;gyro=false;document.body.classList.remove('vr');removeEventListener('deviceorientation',onOri);
+  if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});rs()}
+ $('vr').onclick=enter;$('out').onclick=leave;
+ $('sp').onclick=()=>{split=!split;$('sp').textContent=split?'Vista normal':'Dividir pantalla'};
+ document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&vr)leave()});
+ addEventListener('resize',rs);
+
+ function draw(){
+  if(!(vr&&split)){R.render(scene,cam);return}
+  cam.updateMatrixWorld();sc.update(cam);R.getSize(sz);const w=sz.x/2,h=sz.y;
+  R.setScissorTest(true);
+  R.setViewport(0,0,w,h);R.setScissor(0,0,w,h);R.render(scene,sc.cameraL);
+  R.setViewport(w,0,w,h);R.setScissor(w,0,w,h);R.render(scene,sc.cameraR);
+  R.setScissorTest(false);R.setViewport(0,0,sz.x,sz.y)}
+
+ let last=performance.now();
+ function loop(now){
+  try{
+   const dt=Math.min((now-last)/1000,.1),t=now/1000;last=now;
+   const f=(K.w||K.arrowup?1:0)-(K.s||K.arrowdown?1:0),r=(K.d||K.arrowright?1:0)-(K.a||K.arrowleft?1:0);
+   if(f||r){cam.getWorldDirection(dir);dir.y=0;dir.normalize();pos.x+=(dir.x*f-dir.z*r)*3*dt;pos.z+=(dir.z*f+dir.x*r)*3*dt}
+   S.objs.forEach(o=>{const m=M[o.id];let y=o.y,s=o.s,ry=0;
+    if(o.a==='spin')ry=t;if(o.a==='float')y+=Math.sin(t*2)*.25;if(o.a==='pulse')s*=1+Math.sin(t*3)*.15;
+    m.position.set(o.x,y,o.z);m.rotation.y=ry;m.scale.setScalar(s)});
+   cam.position.copy(pos);
+   if(vr&&gyro){cam.quaternion.setFromAxisAngle(Y,yaw0+yaw);cam.quaternion.multiply(dq)}else cam.rotation.set(pitch,yaw,0,'YXZ');
+   draw();requestAnimationFrame(loop)
+  }catch(e){msg('Error en el 3D: '+e.message)}}
+
+ S.objs.forEach(mk);rs();requestAnimationFrame(loop)}
+
+if(!window.THREE)msg('No se pudo cargar la librería 3D (three.js). Revisa tu conexión y recarga la página.');
+else try{start()}catch(e){msg('Tu navegador no pudo iniciar el 3D (WebGL): '+e.message)}
+</script>
+</body>
+</html>
